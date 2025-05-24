@@ -19,24 +19,29 @@ class StatusesIndex < Chewy::Index
         type: 'stemmer',
         language: 'possessive_english',
       },
-    },
 
-    analyzer: {
-      verbatim: {
-        tokenizer: 'uax_url_email',
-        filter: %w(lowercase),
+      my_posfilter: {
+        type: 'sudachi_part_of_speech',
+        stoptags: [
+          '助詞',
+          '助動詞',
+          '補助記号,句点',
+          '補助記号,読点',
+        ],
       },
-
+    },
+    analyzer: {
       content: {
-        tokenizer: 'standard',
+        tokenizer: 'sudachi_tokenizer',
         filter: %w(
+          english_possessive_stemmer
           lowercase
           asciifolding
           cjk_width
-          elision
-          english_possessive_stemmer
           english_stop
           english_stemmer
+          my_posfilter
+          sudachi_normalizedform
         ),
       },
 
@@ -50,6 +55,15 @@ class StatusesIndex < Chewy::Index
         ),
       },
     },
+
+    tokenizer: {
+      sudachi_tokenizer: {
+        resources_path: '/usr/share/elasticsearch/config/sudachi',
+        split_mode: 'A',
+        type: 'sudachi_tokenizer',
+        discard_punctuation: 'true',
+      },
+    },
   }
 
   index_scope ::Status.unscoped.kept.without_reblogs.includes(:media_attachments, :local_mentioned, :local_favorited, :local_reblogged, :local_bookmarked, :tags, preview_cards_status: :preview_card, preloadable_poll: :local_voters), delete_if: ->(status) { status.searchable_by.empty? }
@@ -57,7 +71,7 @@ class StatusesIndex < Chewy::Index
   root date_detection: false do
     field(:id, type: 'long')
     field(:account_id, type: 'long')
-    field(:text, type: 'text', analyzer: 'verbatim', value: ->(status) { status.searchable_text }) { field(:stemmed, type: 'text', analyzer: 'content') }
+    field(:text, type: 'text', analyzer: 'content', value: ->(status) { status.searchable_text }) { field(:stemmed, type: 'text', analyzer: 'content') }
     field(:tags, type: 'text', analyzer: 'hashtag',  value: ->(status) { status.tags.map(&:display_name) })
     field(:searchable_by, type: 'long', value: ->(status) { status.searchable_by })
     field(:language, type: 'keyword')
@@ -65,3 +79,4 @@ class StatusesIndex < Chewy::Index
     field(:created_at, type: 'date', value: ->(status) { clamp_date(status.created_at) })
   end
 end
+
